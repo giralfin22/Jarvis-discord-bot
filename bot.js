@@ -13,7 +13,7 @@ const client = new Client({
 
 const commands = [
   new SlashCommandBuilder().setName('priorities').setDescription('📋 Show your top priorities for today'),
-  new SlashCommandBuilder().setName('digest').setDescription('📰 Get a full digest of Slack + Calendar + tasks'),
+  new SlashCommandBuilder().setName('digest').setDescription('📰 Get a full daily digest'),
   new SlashCommandBuilder().setName('sop').setDescription('📘 Get or create an SOP').addStringOption(opt => opt.setName('topic').setDescription('What task or process?').setRequired(true)),
   new SlashCommandBuilder().setName('ask').setDescription('🤖 Ask your AI assistant anything').addStringOption(opt => opt.setName('question').setDescription('Your question').setRequired(true)),
   new SlashCommandBuilder().setName('standup').setDescription('📣 Run a team standup'),
@@ -23,14 +23,22 @@ const commands = [
 
 async function registerCommands() {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+  const GUILD_ID = process.env.DISCORD_GUILD_ID;
   try {
-    console.log('Registering slash commands...');
-    await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commands.map(cmd => cmd.toJSON()) });
-    console.log('Slash commands registered!');
+    console.log('Registering slash commands to guild (instant)...');
+    if (GUILD_ID) {
+      // Guild-level: appears instantly
+      await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, GUILD_ID), { body: commands.map(cmd => cmd.toJSON()) });
+      console.log('Guild slash commands registered instantly!');
+    } else {
+      // Fallback: global (up to 1 hour)
+      await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commands.map(cmd => cmd.toJSON()) });
+      console.log('Global slash commands registered (may take up to 1 hour).');
+    }
   } catch (error) { console.error('Failed to register commands:', error); }
 }
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log('Bot is online as: ' + client.user.tag);
   await registerCommands();
   cron.schedule('0 8 * * *', async () => {
@@ -86,11 +94,11 @@ client.on('interactionCreate', async interaction => {
           .setDescription(message).addFields({ name: 'Flagged by', value: interaction.user.toString() }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
         const alertChannel = client.channels.cache.get(process.env.ALERT_CHANNEL_ID);
-        if (alertChannel && alertChannel.id !== interaction.channel.id) alertChannel.send({ content: '@everyone', embeds: [embed] });
+        if (alertChannel && alertChannel.id !== interaction.channelId) alertChannel.send({ content: '@everyone', embeds: [embed] });
         break;
       }
     }
-  } catch (error) { console.error('Command error:', error); await interaction.editReply('❌ Something went wrong.'); }
+  } catch (error) { console.error('Command error:', error); await interaction.editReply('❌ Something went wrong: ' + error.message); }
 });
 
 client.on('messageCreate', async message => {
@@ -99,8 +107,8 @@ client.on('messageCreate', async message => {
   if (urgent.some(kw => message.content.toLowerCase().includes(kw))) {
     const alertChannel = client.channels.cache.get(process.env.ALERT_CHANNEL_ID);
     if (alertChannel) {
-      const embed = new EmbedBuilder().setTitle('⚠️ Urgent Message').setColor('#ED4245')
-        .setDescription('**From:** ' + message.author + '\n**Message:** ' + message.content).setTimestamp();
+      const embed = new EmbedBuilder().setTitle('⚠️ Urgent Message Detected').setColor('#ED4245')
+        .setDescription('**From:** ' + message.author + '\n**Channel:** ' + message.channel + '\n**Message:** ' + message.content).setTimestamp();
       alertChannel.send({ embeds: [embed] });
     }
   }
@@ -110,9 +118,10 @@ async function buildDigest() {
   const cal = new GoogleCalendar(); const slack = new SlackIntegration(); const engine = new PriorityEngine();
   const [events, slackSummary, priorities] = await Promise.allSettled([cal.getTodayEvents(), slack.getDailySummary(), engine.getTopPriorities()]);
   const embed = new EmbedBuilder().setTitle('📰 Daily Digest — ' + new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })).setColor('#5865F2').setTimestamp();
-  if (priorities.status === 'fulfilled') embed.addFields({ name: '🎯 Top Priorities', value: priorities.value.map((p,i) => (i+1) + '. ' + p).join('\n') || 'None' });
-  if (events.status === 'fulfilled' && events.value.length > 0) embed.addFields({ name: '📅 Calendar', value: events.value.map(e => '• **' + e.time + '** ' + e.title).join('\n') });
+  if (priorities.status === 'fulfilled' && priorities.value.length) embed.addFields({ name: '🎯 Top Priorities', value: priorities.value.map((p,i) => (i+1)+'. '+p).join('\n') });
+  if (events.status === 'fulfilled' && events.value.length) embed.addFields({ name: '📅 Calendar', value: events.value.map(e => '• **'+e.time+'** '+e.title).join('\n') });
   if (slackSummary.status === 'fulfilled') embed.addFields({ name: '💬 Slack', value: slackSummary.value || 'No activity' });
+  embed.setFooter({ text: '🤖 Jarvis • Your AI Assistant' });
   return embed;
 }
 
@@ -122,7 +131,7 @@ async function checkSlackUrgent() {
     if (urgent.length > 0) {
       const channel = client.channels.cache.get(process.env.ALERT_CHANNEL_ID);
       if (channel) for (const msg of urgent) {
-        const embed = new EmbedBuilder().setTitle('💬 Urgent Slack').setColor('#ED4245')
+        const embed = new EmbedBuilder().setTitle('💬 Urgent Slack Message').setColor('#ED4245')
           .setDescription('**From:** ' + msg.user + '\n**#' + msg.channel + '**\n' + msg.text).setTimestamp();
         channel.send({ embeds: [embed] });
       }
