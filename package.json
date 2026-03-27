@@ -1,1 +1,16 @@
-{"name":"jarvis-bot","version":"1.0.0","main":"bot.js","scripts":{"start":"node bot.js"},"dependencies":{"@anthropic-ai/sdk":"^0.20.0","@slack/web-api":"^7.0.0","discord.js":"^14.14.0","dotenv":"^16.0.0","googleapis":"^140.0.0","node-cron":"^3.0.0"},"engines":{"node":">=18.0.0"}}
+{
+  "name": "ai-assistant-discord-bot",
+  "version": "1.0.0",
+  "description": "AI-powered Discord bot for business management",
+  "main": "bot.js",
+  "scripts": { "start": "node bot.js" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "@slack/web-api": "^7.0.0",
+    "discord.js": "^14.14.0",
+    "dotenv": "^16.0.0",
+    "googleapis": "^140.0.0",
+    "node-cron": "^3.0.0"
+  },
+  "engines": { "node": ">=18.0.0" }
+}
