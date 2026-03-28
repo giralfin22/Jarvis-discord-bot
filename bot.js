@@ -182,20 +182,40 @@ client.on('interactionCreate', async interaction => {
         break;
       }
       case 'kpi': {
-        const clientArg = (interaction.options.getString('client') || 'all').toLowerCase().trim();
+        const guildId = interaction.guildId;
+        // Map each client server to their own KPI only
+        const SERVER_CLIENT_MAP = {
+          '1432717177433227297': 'strive', // 3am Team / Strive Online (Joao)
+          // Additional servers added here as Jarvis is deployed:
+          // 'SIMPLIFI_GUILD_ID': 'simplifi',
+          // 'MOUNTLEADER_GUILD_ID': 'mountleader',
+          // 'INSTANTAI_GUILD_ID': 'instantai',
+        };
         await interaction.editReply({ content: 'Pulling KPI data from Airtable...' });
-        if (clientArg === 'all') {
-          await postWeeklyKPIs(client);
-          await interaction.editReply({ content: 'KPI reports posted to #kpi-tracker for all 4 clients.' });
-        } else {
-          const validKeys = Object.keys(CLIENTS);
-          const match = validKeys.find(k => k.startsWith(clientArg) || CLIENTS[k].name.toLowerCase().includes(clientArg));
-          if (!match) {
-            await interaction.editReply({ content: 'Client not found. Use: strive, simplifi, mountleader, instantai, or all' });
+        if (guildId === JARVIS_HQ) {
+          // Kyle's HQ — full access, can specify any client or all
+          const clientArg = (interaction.options.getString('client') || 'all').toLowerCase().trim();
+          if (clientArg === 'all') {
+            await postWeeklyKPIs(client);
+            await interaction.editReply({ content: 'KPI reports posted to #kpi-tracker for all 4 clients.' });
           } else {
-            await postSingleKPI(client, match);
-            await interaction.editReply({ content: 'KPI report posted for ' + CLIENTS[match].name });
+            const validKeys = Object.keys(CLIENTS);
+            const match = validKeys.find(k => k.startsWith(clientArg) || CLIENTS[k].name.toLowerCase().includes(clientArg));
+            if (!match) {
+              await interaction.editReply({ content: 'Client not found. Use: strive, simplifi, mountleader, instantai, or all' });
+            } else {
+              await postSingleKPI(client, match);
+              await interaction.editReply({ content: 'KPI report posted for ' + CLIENTS[match].name });
+            }
           }
+        } else if (SERVER_CLIENT_MAP[guildId]) {
+          // Client server — only shows their own KPI, ignores any argument
+          const clientKey = SERVER_CLIENT_MAP[guildId];
+          await postSingleKPI(client, clientKey);
+          await interaction.editReply({ content: 'KPI report posted for ' + CLIENTS[clientKey].name });
+        } else {
+          // Unknown server — not configured yet
+          await interaction.editReply({ content: 'This server is not configured for KPI tracking yet. Contact Kyle to get set up.' });
         }
         break;
       }
