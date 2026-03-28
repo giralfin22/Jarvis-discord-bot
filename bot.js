@@ -95,6 +95,12 @@ client.once('clientReady', async () => {
 
   // Check Slack for urgent messages every 30 mins
   cron.schedule('*/30 * * * *', checkSlackUrgent);
+
+  // EOD closer check-in reminder every day at 8pm ET
+  cron.schedule('0 20 * * *', async () => {
+    console.log('Posting EOD check-in reminders...');
+    await postEODReminders(client);
+  }, { timezone: 'America/New_York' });
 });
 
 client.on('interactionCreate', async interaction => {
@@ -154,7 +160,7 @@ client.on('interactionCreate', async interaction => {
       }
       case 'urgent': {
         const msg = interaction.options.getString('message');
-        const embed = new EmbedBuilder().setTitle('URGENT').setColor('#ED4245')
+        const embed = new EmbedBuilder().setTitle('URGENT').setColor('#ED4"45')
           .setDescription(msg).addFields({ name: 'Flagged by', value: interaction.user.toString() }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
         const hq = client.guilds.cache.get(JARVIS_HQ);
@@ -183,17 +189,11 @@ client.on('interactionCreate', async interaction => {
       }
       case 'kpi': {
         const guildId = interaction.guildId;
-        // Map each client server to their own KPI only
         const SERVER_CLIENT_MAP = {
-          '1432717177433227297': 'strive', // 3am Team / Strive Online (Joao)
-          // Additional servers added here as Jarvis is deployed:
-          // 'SIMPLIFI_GUILD_ID': 'simplifi',
-          // 'MOUNTLEADER_GUILD_ID': 'mountleader',
-          // 'INSTANTAI_GUILD_ID': 'instantai',
+          '1432717177433227297': 'strive',
         };
         await interaction.editReply({ content: 'Pulling KPI data from Airtable...' });
         if (guildId === JARVIS_HQ) {
-          // Kyle's HQ — full access, can specify any client or all
           const clientArg = (interaction.options.getString('client') || 'all').toLowerCase().trim();
           if (clientArg === 'all') {
             await postWeeklyKPIs(client);
@@ -209,12 +209,10 @@ client.on('interactionCreate', async interaction => {
             }
           }
         } else if (SERVER_CLIENT_MAP[guildId]) {
-          // Client server — only shows their own KPI, ignores any argument
           const clientKey = SERVER_CLIENT_MAP[guildId];
           await postSingleKPI(client, clientKey);
           await interaction.editReply({ content: 'KPI report posted for ' + CLIENTS[clientKey].name });
         } else {
-          // Unknown server — not configured yet
           await interaction.editReply({ content: 'This server is not configured for KPI tracking yet. Contact Kyle to get set up.' });
         }
         break;
@@ -283,6 +281,65 @@ async function checkSlackUrgent() {
       }
     }
   } catch(e) {}
+}
+
+async function postEODReminders(discordClient) {
+  const CLOSER_UPDATES_ID = '1487223465718321222';
+  const ch = discordClient.channels.cache.get(CLOSER_UPDATES_ID);
+  if (!ch) { console.log('closer-updates channel not found'); return; }
+
+  const closers = [
+    {
+      name: 'Joao',
+      client: 'Strive Online 🟢',
+      emoji: '📞',
+      fields: `Calls Booked, Calls Taken, Calls Closed, Cash Collected, Tomorrow's improvements`,
+      formUrl: 'https://airtable.com/app3DEGJjfiWl5DPA/shrWfDIHeuceGBK1L'
+    },
+    {
+      name: 'Anthony / Matt',
+      client: 'Simplifi 🔵',
+      emoji: '📞',
+      fields: `Calls Booked, Calls Taken, Calls Closed, Cash Collected, Tomorrow's improvements`,
+      formUrl: 'https://airtable.com/appylAzi80O5SMcgc/shr_ITTTXsVhZL5K'
+    },
+    {
+      name: 'Tilesh',
+      client: 'MountLeader Media 🟢',
+      emoji: '📞',
+      fields: `Calls Booked, Calls Taken, Calls Closed, Cash Collected, Tomorrow's improvements`,
+      formUrl: 'https://airtable.com/appW9tyQ28gnVhmgR/shrxb0uv2pITrEjb4'
+    },
+    {
+      name: 'Younes',
+      client: 'InstantAppointment AI 🟡',
+      emoji: '📱',
+      fields: 'SMS Sent, New Convos, Dials Made, Calls Closed, 1-10 rating for the day',
+      formUrl: 'https://airtable.com/appWCpw7zjLkKYUtC/shr7ZanW2DSE4aIim'
+    },
+  ];
+
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  await ch.send({ content: `📋 **EOD CHECK-IN TIME** — ${dateStr}
+Time to submit your numbers for the day 👇` });
+
+  for (const closer of closers) {
+    const embed = new EmbedBuilder()
+      .setTitle(`${closer.emoji} ${closer.name} — ${closer.client}`)
+      .setColor('#5865F2')
+      .setDescription(`Hey **${closer.name}**, time to submit your EOD report for today!
+
+**What to fill out:**
+${closer.fields}
+
+🔗 **[Submit your EOD report here](${closer.formUrl})**`)
+      .setFooter({ text: 'Submit by 9pm ET | Numbers go straight into Airtable' })
+      .setTimestamp();
+    await ch.send({ embeds: [embed] });
+    await new Promise(r => setTimeout(r, 500));
+  }
+  console.log('EOD reminders posted');
 }
 
 client.login(process.env.DISCORD_TOKEN);
