@@ -12,43 +12,39 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.DirectMessages]
 });
 
-const JARVIS_HQ_GUILD = '1487216341592051804';
+const JARVIS_HQ = '1487216341592051804';
 
 const HQ_CHANNELS = [
-  { name: 'daily-brief', topic: 'AI morning briefing every day at 8am', category: 'KYLE COMMAND CENTER' },
-  { name: 'priorities', topic: 'Daily top priorities', category: 'KYLE COMMAND CENTER' },
-  { name: 'calendar-tracker', topic: 'Upcoming calls from Google Calendar', category: 'KYLE COMMAND CENTER' },
-  { name: 'reminders', topic: 'Follow-ups and smart reminders', category: 'KYLE COMMAND CENTER' },
-  { name: 'kyle-and-jarvis', topic: 'Private chat with Jarvis', category: 'KYLE COMMAND CENTER' },
-  { name: 'closer-updates', topic: 'Daily closer check-in summaries', category: '3AM CLOSING' },
-  { name: 'kpi-tracker', topic: 'Weekly KPI sheets', category: '3AM CLOSING' },
-  { name: 'flags-and-issues', topic: 'Client and closer issues', category: '3AM CLOSING' },
-  { name: 'sales-brain', topic: 'Ask Jarvis sales questions based on Kyles calls', category: 'SALES BRAIN' },
-  { name: 'call-notes', topic: 'Call transcripts and sales brain data', category: 'SALES BRAIN' },
-  { name: 'sop-library', topic: 'Generated SOPs', category: 'SALES BRAIN' },
+  { name: 'daily-brief', topic: 'AI morning briefing every day at 8am', cat: 'KYLE COMMAND CENTER' },
+  { name: 'priorities', topic: 'Daily top priorities', cat: 'KYLE COMMAND CENTER' },
+  { name: 'calendar-tracker', topic: 'Upcoming calls from Google Calendar', cat: 'KYLE COMMAND CENTER' },
+  { name: 'reminders', topic: 'Follow-ups and smart reminders', cat: 'KYLE COMMAND CENTER' },
+  { name: 'kyle-and-jarvis', topic: 'Private chat with Jarvis', cat: 'KYLE COMMAND CENTER' },
+  { name: 'closer-updates', topic: 'Daily closer check-in summaries', cat: '3AM CLOSING' },
+  { name: 'kpi-tracker', topic: 'Weekly KPI sheets', cat: '3AM CLOSING' },
+  { name: 'flags-and-issues', topic: 'Client and closer issues', cat: '3AM CLOSING' },
+  { name: 'sales-brain', topic: 'Ask Jarvis sales questions', cat: 'SALES BRAIN' },
+  { name: 'call-notes', topic: 'Call transcripts and sales brain data', cat: 'SALES BRAIN' },
+  { name: 'sop-library', topic: 'Generated SOPs', cat: 'SALES BRAIN' },
 ];
 
 async function setupJarvisHQ() {
-  const guild = client.guilds.cache.get(JARVIS_HQ_GUILD);
+  const guild = client.guilds.cache.get(JARVIS_HQ);
   if (!guild) return;
   const existingNames = guild.channels.cache.map(c => c.name);
-  const existingCats = guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).map(c => c.name);
-  const catNames = [...new Set(HQ_CHANNELS.map(c => c.category))];
+  const catNames = [...new Set(HQ_CHANNELS.map(c => c.cat))];
   const catMap = {};
   for (const cn of catNames) {
-    const existing = guild.channels.cache.find(c => c.name.includes(cn.split(' ')[1] || cn) && c.type === ChannelType.GuildCategory);
+    const existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.includes(cn.split(' ')[1] || cn));
     if (existing) { catMap[cn] = existing.id; continue; }
-    try {
-      const cat = await guild.channels.create({ name: cn, type: ChannelType.GuildCategory });
-      catMap[cn] = cat.id;
-    } catch(e) { console.log('Cat exists or error:', cn); }
+    try { const cat = await guild.channels.create({ name: cn, type: ChannelType.GuildCategory }); catMap[cn] = cat.id; } catch(e) {}
   }
   for (const ch of HQ_CHANNELS) {
     if (!existingNames.some(n => n.includes(ch.name))) {
       try {
-        await guild.channels.create({ name: ch.name, type: ChannelType.GuildText, topic: ch.topic, parent: catMap[ch.category] });
+        await guild.channels.create({ name: ch.name, type: ChannelType.GuildText, topic: ch.topic, parent: catMap[ch.cat] });
         console.log('Created: ' + ch.name);
-      } catch(e) { console.log('Channel error:', ch.name, e.message); }
+      } catch(e) { console.log('Channel exists or error:', ch.name); }
     }
   }
   console.log('Jarvis HQ setup complete');
@@ -80,7 +76,7 @@ client.once('clientReady', async () => {
   for (const [id] of client.guilds.cache) await registerCommands(id);
   await setupJarvisHQ();
   cron.schedule('0 8 * * *', async () => {
-    const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
+    const hq = client.guilds.cache.get(JARVIS_HQ);
     if (hq) {
       const ch = hq.channels.cache.find(c => c.name.includes('daily-brief'));
       if (ch) ch.send({ embeds: [await buildDigest()] });
@@ -97,83 +93,100 @@ client.on('interactionCreate', async interaction => {
       case 'priorities': {
         const engine = new PriorityEngine();
         const p = await engine.getTopPriorities();
-        const embed = new EmbedBuilder().setTitle('Your Top Priorities').setColor('#5865F2').setDescription(p.map((x,i) => (i+1)+'. '+x).join('
-')).setTimestamp();
+        const lines = p.map((x, i) => (i + 1) + '. ' + x).join('\n');
+        const embed = new EmbedBuilder().setTitle('Your Top Priorities').setColor('#5865F2').setDescription(lines).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
-        const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
-        if (hq && interaction.guildId !== JARVIS_HQ_GUILD) {
+        const hq = client.guilds.cache.get(JARVIS_HQ);
+        if (hq && interaction.guildId !== JARVIS_HQ) {
           const ch = hq.channels.cache.find(c => c.name.includes('priorities'));
           if (ch) ch.send({ embeds: [embed] });
         }
         break;
       }
-      case 'digest': { await interaction.editReply({ embeds: [await buildDigest()] }); break; }
+      case 'digest': {
+        await interaction.editReply({ embeds: [await buildDigest()] });
+        break;
+      }
       case 'calendar': {
-        const cal = new GoogleCalendar(); const events = await cal.getTodayEvents();
-        const embed = new EmbedBuilder().setTitle('Todays Calendar').setColor('#4285F4').setDescription(events.length ? events.map(e => '**'+e.time+'** - '+e.title).join('
-') : 'No events today').setTimestamp();
-        await interaction.editReply({ embeds: [embed] }); break;
+        const cal = new GoogleCalendar();
+        const events = await cal.getTodayEvents();
+        const desc = events.length ? events.map(e => '**' + e.time + '** - ' + e.title).join('\n') : 'No events today';
+        const embed = new EmbedBuilder().setTitle('Todays Calendar').setColor('#4285F4').setDescription(desc).setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+        break;
       }
       case 'ask': {
         const q = interaction.options.getString('question');
-        const claude = new ClaudeAI(); const a = await claude.ask(q);
-        const embed = new EmbedBuilder().setTitle('Jarvis').setColor('#FEE75C').addFields({name:'Question',value:q},{name:'Answer',value:a.slice(0,1024)}).setTimestamp();
-        await interaction.editReply({ embeds: [embed] }); break;
+        const claude = new ClaudeAI();
+        const a = await claude.ask(q);
+        const embed = new EmbedBuilder().setTitle('Jarvis').setColor('#FEE75C')
+          .addFields({ name: 'Question', value: q }, { name: 'Answer', value: a.slice(0, 1024) }).setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+        break;
       }
       case 'sop': {
         const topic = interaction.options.getString('topic');
-        const sop = new SOPManager(); const result = await sop.getOrCreate(topic);
-        const embed = new EmbedBuilder().setTitle('SOP: '+topic).setColor('#57F287').setDescription(result.slice(0,4096)).setTimestamp();
+        const sop = new SOPManager();
+        const result = await sop.getOrCreate(topic);
+        const embed = new EmbedBuilder().setTitle('SOP: ' + topic).setColor('#57F287').setDescription(result.slice(0, 4096)).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
-        const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
+        const hq = client.guilds.cache.get(JARVIS_HQ);
         if (hq) { const ch = hq.channels.cache.find(c => c.name.includes('sop-library')); if (ch) ch.send({ embeds: [embed] }); }
         break;
       }
       case 'standup': {
-        const embed = new EmbedBuilder().setTitle('Daily Standup').setColor('#EB459E').setDescription('1. What did you accomplish yesterday
-2. What are you working on today
-3. Any blockers').setTimestamp();
-        await interaction.editReply({ embeds: [embed] }); break;
+        const desc = '1. What did you accomplish yesterday\n2. What are you working on today\n3. Any blockers';
+        const embed = new EmbedBuilder().setTitle('Daily Standup').setColor('#EB459E').setDescription(desc).setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+        break;
       }
       case 'urgent': {
         const msg = interaction.options.getString('message');
-        const embed = new EmbedBuilder().setTitle('URGENT').setColor('#ED4245').setDescription(msg).addFields({name:'Flagged by',value:interaction.user.toString()}).setTimestamp();
+        const embed = new EmbedBuilder().setTitle('URGENT').setColor('#ED4245')
+          .setDescription(msg).addFields({ name: 'Flagged by', value: interaction.user.toString() }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
-        const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
+        const hq = client.guilds.cache.get(JARVIS_HQ);
         if (hq) { const ch = hq.channels.cache.find(c => c.name.includes('flags')); if (ch) ch.send({ embeds: [embed] }); }
         break;
       }
       case 'closer': {
-        const name = interaction.options.getString('name'); const update = interaction.options.getString('update');
-        const embed = new EmbedBuilder().setTitle('Closer Update: '+name).setColor('#57F287').setDescription(update).addFields({name:'Date',value:new Date().toLocaleDateString()}).setTimestamp();
+        const name = interaction.options.getString('name');
+        const update = interaction.options.getString('update');
+        const embed = new EmbedBuilder().setTitle('Closer Update: ' + name).setColor('#57F287')
+          .setDescription(update).addFields({ name: 'Date', value: new Date().toLocaleDateString() }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
-        const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
+        const hq = client.guilds.cache.get(JARVIS_HQ);
         if (hq) { const ch = hq.channels.cache.find(c => c.name.includes('closer-updates')); if (ch) ch.send({ embeds: [embed] }); }
         break;
       }
       case 'followup': {
-        const person = interaction.options.getString('person'); const note = interaction.options.getString('note');
-        const embed = new EmbedBuilder().setTitle('Follow-up Logged').setColor('#FEE75C').addFields({name:'With',value:person},{name:'About',value:note},{name:'Date',value:new Date().toLocaleDateString()}).setTimestamp();
+        const person = interaction.options.getString('person');
+        const note = interaction.options.getString('note');
+        const embed = new EmbedBuilder().setTitle('Follow-up Logged').setColor('#FEE75C')
+          .addFields({ name: 'With', value: person }, { name: 'About', value: note }, { name: 'Date', value: new Date().toLocaleDateString() }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
-        const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
+        const hq = client.guilds.cache.get(JARVIS_HQ);
         if (hq) { const ch = hq.channels.cache.find(c => c.name.includes('reminders')); if (ch) ch.send({ embeds: [embed] }); }
         break;
       }
     }
-  } catch(e) { console.error('Command error:', e); await interaction.editReply('Error: '+e.message); }
+  } catch(e) {
+    console.error('Command error:', e.message);
+    await interaction.editReply('Error: ' + e.message);
+  }
 });
 
 client.on('messageCreate', async msg => {
   if (msg.author.bot) return;
-  const urgent = ['urgent','asap','emergency','critical'];
+  const urgent = ['urgent', 'asap', 'emergency', 'critical'];
   if (urgent.some(k => msg.content.toLowerCase().includes(k))) {
-    const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
+    const hq = client.guilds.cache.get(JARVIS_HQ);
     if (hq) {
       const ch = hq.channels.cache.find(c => c.name.includes('flags'));
       if (ch) {
-        const embed = new EmbedBuilder().setTitle('Urgent Message Detected').setColor('#ED4245').setDescription('From: '+msg.author+'
-Server: '+(msg.guild ? msg.guild.name : 'DM')+'
-'+msg.content).setTimestamp();
+        const server = msg.guild ? msg.guild.name : 'DM';
+        const desc = 'From: ' + msg.author + '\nServer: ' + server + '\n' + msg.content;
+        const embed = new EmbedBuilder().setTitle('Urgent Message Detected').setColor('#ED4245').setDescription(desc).setTimestamp();
         ch.send({ embeds: [embed] });
       }
     }
@@ -181,29 +194,41 @@ Server: '+(msg.guild ? msg.guild.name : 'DM')+'
 });
 
 async function buildDigest() {
-  const cal = new GoogleCalendar(); const slack = new SlackIntegration(); const engine = new PriorityEngine();
-  const [events, slackSummary, priorities] = await Promise.allSettled([cal.getTodayEvents(), slack.getDailySummary(), engine.getTopPriorities()]);
-  const embed = new EmbedBuilder().setTitle('Good Morning Kyle - ' + new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})).setColor('#5865F2').setTimestamp();
-  if (priorities.status==='fulfilled'&&priorities.value.length) embed.addFields({name:'Top Priorities',value:priorities.value.map((p,i)=>(i+1)+'. '+p).join('
-')});
-  if (events.status==='fulfilled'&&events.value.length) embed.addFields({name:'Calendar Today',value:events.value.map(e=>'- '+e.time+' '+e.title).join('
-')});
-  if (slackSummary.status==='fulfilled') embed.addFields({name:'Slack',value:slackSummary.value||'No activity'});
-  embed.setFooter({text:'Jarvis - Your AI Chief of Staff'});
+  const cal = new GoogleCalendar();
+  const slack = new SlackIntegration();
+  const engine = new PriorityEngine();
+  const [events, slackSummary, priorities] = await Promise.allSettled([
+    cal.getTodayEvents(), slack.getDailySummary(), engine.getTopPriorities()
+  ]);
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const embed = new EmbedBuilder().setTitle('Good Morning Kyle - ' + dateStr).setColor('#5865F2').setTimestamp();
+  if (priorities.status === 'fulfilled' && priorities.value.length) {
+    embed.addFields({ name: 'Top Priorities', value: priorities.value.map((p, i) => (i + 1) + '. ' + p).join('\n') });
+  }
+  if (events.status === 'fulfilled' && events.value.length) {
+    embed.addFields({ name: 'Calendar Today', value: events.value.map(e => '- ' + e.time + ' ' + e.title).join('\n') });
+  }
+  if (slackSummary.status === 'fulfilled') {
+    embed.addFields({ name: 'Slack', value: slackSummary.value || 'No activity' });
+  }
+  embed.setFooter({ text: 'Jarvis - Your AI Chief of Staff' });
   return embed;
 }
 
 async function checkSlackUrgent() {
   try {
-    const slack = new SlackIntegration(); const urgent = await slack.getUrgentMessages();
+    const slack = new SlackIntegration();
+    const urgent = await slack.getUrgentMessages();
     if (urgent.length) {
-      const hq = client.guilds.cache.get(JARVIS_HQ_GUILD);
+      const hq = client.guilds.cache.get(JARVIS_HQ);
       if (hq) {
         const ch = hq.channels.cache.find(c => c.name.includes('flags'));
-        if (ch) for (const m of urgent) {
-          const embed = new EmbedBuilder().setTitle('Urgent Slack').setColor('#ED4245').setDescription('From: '+m.user+' in #'+m.channel+'
-'+m.text).setTimestamp();
-          ch.send({ embeds: [embed] });
+        if (ch) {
+          for (const m of urgent) {
+            const desc = 'From: ' + m.user + ' in #' + m.channel + '\n' + m.text;
+            const embed = new EmbedBuilder().setTitle('Urgent Slack').setColor('#ED4245').setDescription(desc).setTimestamp();
+            ch.send({ embeds: [embed] });
+          }
         }
       }
     }
