@@ -190,7 +190,10 @@ client.on('interactionCreate', async interaction => {
       case 'kpi': {
         const guildId = interaction.guildId;
         const SERVER_CLIENT_MAP = {
-          '1432717177433227297': 'strive',
+          '1445459547555762268': 'Strive',
+          '1421475034681311334': 'Simplifi',
+          '1468355747720204482': 'MountLeader',
+          '1487590928406286476': 'InstantAppointment'
         };
         await interaction.editReply({ content: 'Pulling KPI data from Airtable...' });
         if (guildId === JARVIS_HQ) {
@@ -291,29 +294,29 @@ async function postEODReminders(discordClient) {
   const closers = [
     {
       name: 'Joao',
-      client: 'Strive Online 🟢',
-      emoji: '📞',
+      client: 'Strive Online ð¢',
+      emoji: 'ð',
       fields: `Calls Booked, Calls Taken, Calls Closed, Cash Collected, Tomorrow's improvements`,
       formUrl: 'https://airtable.com/app3DEGJjfiWl5DPA/shrWfDIHeuceGBK1L'
     },
     {
       name: 'Anthony / Matt',
-      client: 'Simplifi 🔵',
-      emoji: '📞',
+      client: 'Simplifi ðµ',
+      emoji: 'ð',
       fields: `Calls Booked, Calls Taken, Calls Closed, Cash Collected, Tomorrow's improvements`,
       formUrl: 'https://airtable.com/appylAzi80O5SMcgc/shr_ITTTXsVhZL5K'
     },
     {
       name: 'Tilesh',
-      client: 'MountLeader Media 🟢',
-      emoji: '📞',
+      client: 'MountLeader Media ð¢',
+      emoji: 'ð',
       fields: `Calls Booked, Calls Taken, Calls Closed, Cash Collected, Tomorrow's improvements`,
       formUrl: 'https://airtable.com/appW9tyQ28gnVhmgR/shrxb0uv2pITrEjb4'
     },
     {
       name: 'Younes',
-      client: 'InstantAppointment AI 🟡',
-      emoji: '📱',
+      client: 'InstantAppointment AI ð¡',
+      emoji: 'ð±',
       fields: 'SMS Sent, New Convos, Dials Made, Calls Closed, 1-10 rating for the day',
       formUrl: 'https://airtable.com/appWCpw7zjLkKYUtC/shr7ZanW2DSE4aIim'
     },
@@ -321,19 +324,19 @@ async function postEODReminders(discordClient) {
 
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-  await ch.send({ content: `📋 **EOD CHECK-IN TIME** — ${dateStr}
-Time to submit your numbers for the day 👇` });
+  await ch.send({ content: `ð **EOD CHECK-IN TIME** â ${dateStr}
+Time to submit your numbers for the day ð` });
 
   for (const closer of closers) {
     const embed = new EmbedBuilder()
-      .setTitle(`${closer.emoji} ${closer.name} — ${closer.client}`)
+      .setTitle(`${closer.emoji} ${closer.name} â ${closer.client}`)
       .setColor('#5865F2')
       .setDescription(`Hey **${closer.name}**, time to submit your EOD report for today!
 
 **What to fill out:**
 ${closer.fields}
 
-🔗 **[Submit your EOD report here](${closer.formUrl})**`)
+ð **[Submit your EOD report here](${closer.formUrl})**`)
       .setFooter({ text: 'Submit by 9pm ET | Numbers go straight into Airtable' })
       .setTimestamp();
     await ch.send({ embeds: [embed] });
