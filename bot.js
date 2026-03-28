@@ -45,14 +45,12 @@ async function setupJarvisHQ() {
       try {
         await guild.channels.create({ name: ch.name, type: ChannelType.GuildText, topic: ch.topic, parent: catMap[ch.cat] });
         console.log('Created: ' + ch.name);
-      } catch(e) { console.log('Channel exists:', ch.name); }
+      } catch(e) { console.log('Channel exists or error:', ch.name); }
     }
   }
   console.log('Jarvis HQ setup complete');
   await postSalesBrain(client);
 }
-
-const clientChoices = Object.keys(CLIENTS).map(k => ({ name: CLIENTS[k].name, value: k }));
 
 const commands = [
   new SlashCommandBuilder().setName('priorities').setDescription('Your top priorities today'),
@@ -64,9 +62,7 @@ const commands = [
   new SlashCommandBuilder().setName('urgent').setDescription('Flag something urgent').addStringOption(o => o.setName('message').setDescription('What is urgent').setRequired(true)),
   new SlashCommandBuilder().setName('closer').setDescription('Log a closer update').addStringOption(o => o.setName('name').setDescription('Closer name').setRequired(true)).addStringOption(o => o.setName('update').setDescription('Their update').setRequired(true)),
   new SlashCommandBuilder().setName('followup').setDescription('Set a follow-up reminder').addStringOption(o => o.setName('person').setDescription('Who').setRequired(true)).addStringOption(o => o.setName('note').setDescription('About what').setRequired(true)),
-  new SlashCommandBuilder().setName('kpi').setDescription('Pull KPI report from Airtable')
-    .addStringOption(o => o.setName('client').setDescription('Which client').setRequired(false)
-      .addChoices(...clientChoices, { name: 'All Clients', value: 'all' })),
+  new SlashCommandBuilder().setName('kpi').setDescription('Pull KPI report from Airtable').addStringOption(o => o.setName('client').setDescription('Client name (strive, simplifi, mountleader, instantai, or all)').setRequired(false)),
 ];
 
 async function registerCommands(guildId) {
@@ -82,7 +78,7 @@ client.once('clientReady', async () => {
   for (const [id] of client.guilds.cache) await registerCommands(id);
   await setupJarvisHQ();
 
-  // Daily digest at 8am ET
+  // Daily morning digest at 8am ET
   cron.schedule('0 8 * * *', async () => {
     const hq = client.guilds.cache.get(JARVIS_HQ);
     if (hq) {
@@ -91,11 +87,13 @@ client.once('clientReady', async () => {
     }
   }, { timezone: 'America/New_York' });
 
-  // Weekly KPI report every Monday at 8am ET 
-  cron.schedule('0 8 * * 1', async () => {
+  // Weekly KPI report every Monday at 9am ET
+  cron.schedule('0 9 * * 1', async () => {
+    console.log('Posting weekly KPI reports...');
     await postWeeklyKPIs(client);
   }, { timezone: 'America/New_York' });
 
+  // Check Slack for urgent messages every 30 mins
   cron.schedule('*/30 * * * *', checkSlackUrgent);
 });
 
@@ -184,15 +182,20 @@ client.on('interactionCreate', async interaction => {
         break;
       }
       case 'kpi': {
-        const clientKey = interaction.options.getString('client') || 'all';
+        const clientArg = (interaction.options.getString('client') || 'all').toLowerCase().trim();
         await interaction.editReply({ content: 'Pulling KPI data from Airtable...' });
-        if (clientKey === 'all') {
+        if (clientArg === 'all') {
           await postWeeklyKPIs(client);
           await interaction.editReply({ content: 'KPI reports posted to #kpi-tracker for all 4 clients.' });
         } else {
-          await postSingleKPI(client, clientKey);
-          const clientName = CLIENTS[clientKey] ? CLIENTS[clientKey].name : clientKey;
-          await interaction.editReply({ content: 'KPI report posted to #kpi-tracker for ' + clientName + '.' });
+          const validKeys = Object.keys(CLIENTS);
+          const match = validKeys.find(k => k.startsWith(clientArg) || CLIENTS[k].name.toLowerCase().includes(clientArg));
+          if (!match) {
+            await interaction.editReply({ content: 'Client not found. Use: strive, simplifi, mountleader, instantai, or all' });
+          } else {
+            await postSingleKPI(client, match);
+            await interaction.editReply({ content: 'KPI report posted for ' + CLIENTS[match].name });
+          }
         }
         break;
       }
@@ -213,7 +216,7 @@ client.on('messageCreate', async msg => {
       if (ch) {
         const server = msg.guild ? msg.guild.name : 'DM';
         const desc = 'From: ' + msg.author + '\nServer: ' + server + '\n' + msg.content;
-        const embed = new EmbedBuilder().setTitle('Urgent Message Detected').setColor('#ED4"45').setDescription(desc).setTimestamp();
+        const embed = new EmbedBuilder().setTitle('Urgent Message Detected').setColor('#ED4245').setDescription(desc).setTimestamp();
         ch.send({ embeds: [embed] });
       }
     }
